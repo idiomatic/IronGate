@@ -1,7 +1,17 @@
 ## Interface: 43000
-## Title: IronGate |cff00aa000.1|r
+## Title: IronGate |cff00aa000.2|r
 ## Author: r brian harrison
-## Version: 0.1
-## SavedVariables: IronGate_DB
+## Version: 0.2
+## SavedVariablesPerCharacter: IronGateDB
 
 IronGate.lua
+Locales\deDE.lua
+Locales\enUS.lua
+Locales\esES.lua
+Locales\esMX.lua
+Locales\frFR.lua
+Locales\ptBR.lua
+Locales\koKR.lua
+Locales\ruRU.lua
+Locales\zhCN.lua
+Locales\zhTW.lua
