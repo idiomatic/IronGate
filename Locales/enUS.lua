@@ -13,3 +13,7 @@ L["%s buff from %s"] = true
 L["Guild %s is level %d."] = true
 L["Quest \"%s\" may kill you."] = true
 L["Player died."] = true
+L["Trading."] = true
+L["Talents."] = true
+L["%d points in %s talent."] = true
+L["%s trainer."] = true

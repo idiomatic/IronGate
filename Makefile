@@ -1,11 +1,20 @@
 # Copyright (c) 2012, r. brian harrison.  All rights reserved.
 
-VERSION=0.2
+VERSION=0.3
 
 APP=IronGate
 
 FILES=	$(APP)/$(APP).toc \
 	$(APP)/$(APP).lua \
+	$(APP)/Locales/deDE.lua \
+	$(APP)/Locales/enUS.lua \
+	$(APP)/Locales/esES.lua \
+	$(APP)/Locales/frFR.lua \
+	$(APP)/Locales/koKR.lua \
+	$(APP)/Locales/ptBR.lua \
+	$(APP)/Locales/ruRU.lua \
+	$(APP)/Locales/zhCN.lua \
+	$(APP)/Locales/zhTW.lua \
 	$(APP)/$(APP)_Version.lua
 
 DIRS=	

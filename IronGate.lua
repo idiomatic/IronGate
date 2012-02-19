@@ -1,6 +1,12 @@
 
 -- World of Warcraft Ironman Challenge
 
+-- TODO detect and notify:
+-- TODO detect assistance (damage dealt < mob's total HP)
+-- TODO detect refer-a-friend effects
+-- TODO detect leveing addons (?)
+
+-- TODO take preventitive actions:
 -- TODO prevent equpping green (or better) items (hard because protected API)
 -- TODO prevent partying
 -- TODO prevent trades
@@ -16,22 +22,23 @@
 -- TODO prevent using buff foods
 -- TODO prevent suicidal quests
 -- TODO prevent dungeons, raids, battlegrounds, arenas
--- TODO detect assistance (damage dealt < mob's total HP)
--- TODO detect refer-a-friend effects
--- TODO detect leveing addons (?)
 
+-- TODO user interface:
 -- TODO display status HUD
 -- TODO option to disable prevention
 -- TODO option to try to remedy (cancel aura, equip a lesser item)
-
+-- TODO stop flashing talent button
+-- TODO block guild invites?
 -- TODO addon broadcast transgressions (collaborative debugging)
-
+-- TODO announce on "iron" channel death (level, generation) cause
+-- TODO reset recent_warnings occasionally
 
 IronGateDB = { }
 
 IronGate = {
     Locales = { },
     max_warnings = 5,
+    recent_warnings = { },
 }
 
 local DB = IronGateDB
@@ -62,6 +69,10 @@ function IronGate.DebugMessage(fmt, ...)
 						string.format(fmt, ...)))
 end
 
+function IronGate.ResetRecentWarnings()
+    IronGate.recent_warnings = { }
+end
+
 function IronGate.Warning(reason, ...)
     IronGate.ChatMessage(string.format("|cffffc000%s:|r %s", L["Warning"],
 				       string.format(reason, ...)))
@@ -70,12 +81,13 @@ end
 function IronGate.Disqualify(reason, ...)
     if not IronGateDB.disqualified then
 	IronGateDB.disqualified = true
-	IronGateDB.disqualification_reason = reason
+	IronGateDB.disqualification_reason = string.format(reason, ...)
     end
     if not IronGate.disqualified then
 	IronGate.disqualified = true
 	IronGate.ChatMessage("|cffff0000%s: %s|r", L["Disqualified"],
 			     string.format(reason, ...))
+	-- bug the player no longer with warnings
 	IronGate.max_warnings = 0
     end
 end
@@ -97,10 +109,11 @@ function IronGate.WarnTransgressions(...)
 	local co = coroutine.create(audit)
 	repeat
 	    local ok, message = coroutine.resume(co)
-	    if ok and message then
+	    if ok and message and IronGate.recent_warnings[message] == nil then
 		warnings = warnings + 1
 		if warnings <= IronGate.max_warnings then
 		    IronGate.Warning(message)
+		    IronGate.recent_warnings[message] = true
 		end
 	    end
 	until not ok
@@ -197,11 +210,25 @@ function IronGate.PartyAudit()
     end
 end
 
+local acceptable_aura_sources = {
+    ["player"] = true,
+    ["pet"] = true,
+    ["vehicle"] = true,
+}
+
+local acceptable_aura_spell_ids = {
+    [69867] = true, -- Barrens Bloom
+    -- human starter zone
+}
+
 function IronGate.AuraAudit()
     for i = 1, MAX_TARGET_BUFFS do
-	local name, _, _, _, _, _, _, source, _, _, _ = UnitBuff("player", i)
-	if source ~= "player" and source ~= "pet" and source ~= "vehicle" then
-	    coroutine.yield(string.format(L["%s buff from %s."], name, source))
+	local name, _, _, _, _, _, _, source, _, _, spell_id = UnitBuff("player", i)
+	if name == nil then
+	    break
+	end
+	if not acceptable_aura_sources[source] and not acceptable_aura_spell_ids[spell_id] then
+	    coroutine.yield(string.format(L["%s buff."], name))
 	end
     end
 end
@@ -216,8 +243,24 @@ function IronGate.GuildAudit()
     end
 end
 
+function IronGate.TalentAudit()
+    function talent_audit(pet)
+	for tab_index = 1, GetNumTalentTabs(false, pet) do
+	    for talent_index = 1, GetNumTalents(tab_index, false, pet) do
+		local name, _, _, _, rank = GetTalentInfo(tab_index, talent_index)
+		if rank > 0 then
+		    coroutine.yield(string.format(L["%d points in %s talent."]))
+		end
+	    end
+	end
+    end
+    talent_audit(false)
+    talent_audit(true)
+end
+
 local deadly_quests = {
     [27377] = true, -- Twilight Highlands: Devoured
+    -- Howling Fjord: (from Valgarde)
 }
 
 function IronGate.QuestAudit()
@@ -232,16 +275,39 @@ function IronGate.QuestAudit()
     end
 end
 
+function IronGate.TrainerProfessionsAudit()
+    if IsTradeskillTrainer() then
+	for i = 1, GetNumTrainerServices() do
+	    local skill = GetTrainerServiceSkillLine(i)
+	    if skill ~= PROFESSIONS_FIRST_AID then
+		coroutine.yield(string.format(L["%s trainer."], skill))
+		break
+	    end
+	end
+    end
+end
+
 function IronGate.PLAYER_DEAD()
     IronGate.Disqualify(L["Player died."])
 end
 
 function IronGate.PLAYER_LOGIN()
+    local generation = IronGateDB.generation or 1
     if UnitLevel("player") == 1 and UnitXP("player") == 0 then
+	-- character is rerolled
+	generation = generation + (IronGateDB.experienced and 1 or 0)
 	wipe(IronGateDB)
     end
+    IronGateDB.generation = generation
     IronGate.ChatMessage(L["Welcome to the Ironman Challenge. Watch your step."])
     IronGate.DisqualifyOnFirstTransgression(IronGate.StatisticsAudit)
+    IronGate.WarnTransgressions(
+	IronGate.EquippedAudit,
+	IronGate.PartyAudit,
+	IronGate.AuraAudit,
+	IronGate.GuildAudit,
+	IronGate.TalentAudit
+    )
 end
 
 function IronGate.PLAYER_XP_UPDATE()
@@ -249,8 +315,12 @@ function IronGate.PLAYER_XP_UPDATE()
 	IronGate.EquippedAudit,
 	IronGate.PartyAudit,
 	IronGate.AuraAudit,
-	IronGate.GuildAudit
+	IronGate.GuildAudit,
+	IronGate.TalentAudit
     )
+    IronGateDB.experienced = true
+    -- ill placed
+    IronGate.ResetRecentWarnings()
 end
 
 function IronGate.PLAYER_EQUIPMENT_CHANGED()
@@ -273,20 +343,43 @@ function IronGate.QUEST_ACCEPTED()
     IronGate.WarnTransgressions(IronGate.QuestAudit)
 end
 
+function IronGate.ToggleTalentFrame()
+    if PlayerTalentFrameTalents and PlayerTalentFrameTalents:IsVisible() then
+	IronGate.Warning(L["Talents."])
+    end
+end
+
+function IronGate.PLAYER_TALENT_UPDATE()
+    IronGate.DisqualifyOnFirstTransgression(IronGate.TalentAudit)
+end
+
+function IronGate.TRADE_SHOW()
+    IronGate.Warning(L["Trading."])
+end
+
+function IronGate.TRADE_ACCEPT_UPDATE(player_agreed, target_agreed)
+    if player_agreed == 1 and target_agreed == 1 then
+	-- XXX Should check on whether anything was traded
+	IronGate.Disqualify(L["Trading."])
+    end
+end
+
+function IronGate.TRAINER_SHOW()
+    IronGate.WarnTransgressions(IronGate.TrainerProfessionsAudit)
+end
+
 local frame = CreateFrame("Frame", "IronGate")
-function frame:OnEvent(event, arg1, arg2, arg3)
+function frame:OnEvent(event, ...)
     local fn = IronGate[event]
     if fn then
-	fn()
+	fn(...)
+    else
+	IronGate.DebugMessage(event, ...)
     end
 end
 
 frame:SetScript("OnEvent", frame.OnEvent)
 frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
---frame:RegisterEvent("UNIT_INVENTORY_CHANGED")
---frame:RegisterEvent("WEAR_EQUIPMENT_SET")
---frame:RegisterEvent("EQUIPMENT_SWAP_PENDING")
---frame:RegisterEvent("EQUIPMENT_SWAP_FINISHED")
 frame:RegisterEvent("PLAYER_DEAD")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_XP_UPDATE")
@@ -294,3 +387,8 @@ frame:RegisterEvent("PARTY_MEMBERS_CHANGED")
 frame:RegisterEvent("UNIT_AURA")
 frame:RegisterEvent("PLAYER_GUILD_UPDATE")
 frame:RegisterEvent("QUEST_ACCEPTED")
+hooksecurefunc("ToggleTalentFrame", IronGate.ToggleTalentFrame)
+frame:RegisterEvent("PLAYER_TALENT_UPDATE")
+frame:RegisterEvent("TRADE_SHOW")
+frame:RegisterEvent("TRADE_ACCEPT_UPDATE")
+frame:RegisterEvent("TRAINER_SHOW")
