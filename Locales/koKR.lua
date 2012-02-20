@@ -1,3 +1,3 @@
 local L = { }
-IronGate.Locales.koKR = L
+IronGate.locales.koKR = L
 

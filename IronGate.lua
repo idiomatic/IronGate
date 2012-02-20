@@ -5,51 +5,51 @@
 -- TODO detect assistance (damage dealt < mob's total HP)
 -- TODO detect refer-a-friend effects
 -- TODO detect leveing addons (?)
+-- TODO detect receipt of items or gold in mail (except AH)
 
 -- TODO take preventitive actions:
--- TODO prevent equpping green (or better) items (hard because protected API)
--- TODO prevent partying
--- TODO prevent trades
+-- TODO prevent equpping green (or better) items (hard because of protected API)
 -- TODO prevent enchanting (except rogue poisons)
 -- TODO prevent gemming
 -- TODO prevent reforging
 -- TODO prevent specialization
--- TODO prevent talent points
--- TODO prevent pet talent points
 -- TODO prevent glyphs
--- TODO prevent professions (except First Aid)
 -- TODO prevent using potions, flasks, elixirs (except Quest items)
 -- TODO prevent using buff foods
--- TODO prevent suicidal quests
 -- TODO prevent dungeons, raids, battlegrounds, arenas
 
 -- TODO user interface:
 -- TODO display status HUD
 -- TODO option to disable prevention
 -- TODO option to try to remedy (cancel aura, equip a lesser item)
--- TODO stop flashing talent button
--- TODO block guild invites?
+-- TODO block guild invites (unless they have "iron" in their name)?
 -- TODO addon broadcast transgressions (collaborative debugging)
 -- TODO announce on "iron" channel death (level, generation) cause
--- TODO reset recent_warnings occasionally
+-- TODO indicate if player-target is qualified
 
 IronGateDB = { }
 
 IronGate = {
-    Locales = { },
-    max_warnings = 5,
+    disqualified = false,
+    locales = { },
+    preferred_locale = GetLocale(),
+    fallback_locale = 'enUS',
+    show_warnings = true,
     recent_warnings = { },
+    next_warning_sound = 0,
+    warning_interval = 15, -- do not say the same warning too often
+    warning_sound_interval = 2, -- do not make a sound too often
+    warning_sound_name = 'RaidWarning',
+    disqualified_sound_name = 'igQuestFailed' or 'Deathbind Sound',
+    sound_channel = 'Master',
 }
 
 local DB = IronGateDB
 
-local preferred_locale = GetLocale()
-local fallback_locale = 'enUS'
-
 local L = setmetatable({ }, {
     __index = function (self, key)
-		  local pl = IronGate.Locales[preferred_locale]
-		  local fl = IronGate.Locales[fallback_locale]
+		  local pl = IronGate.locales[IronGate.preferred_locale]
+		  local fl = IronGate.locales[IronGate.fallback_locale]
 		  local value = (pl and pl[key]) or (fl and fl[key]) or key
 		  if value == true then
 		      value = key
@@ -59,67 +59,80 @@ local L = setmetatable({ }, {
 	      end,
 })
 
-function IronGate.ChatMessage(fmt, ...)
+function IronGate:ChatMessage(fmt, ...)
     DEFAULT_CHAT_FRAME:AddMessage(string.format("|cffc0c0c0IronGate:|r %s",
 						string.format(fmt, ...)))
 end
 
-function IronGate.DebugMessage(fmt, ...)
+function IronGate:DebugMessage(fmt, ...)
     DEFAULT_CHAT_FRAME:AddMessage(string.format("|cff7f7f7fIronGate:|r %s",
 						string.format(fmt, ...)))
 end
 
-function IronGate.ResetRecentWarnings()
-    IronGate.recent_warnings = { }
+function IronGate:ResetWarningDebouncers(elapsed)
+    self.next_warning_sound = self.next_warning_sound + elapsed
+    for message, next in pairs(self.recent_warnings) do
+	local next = next + elapsed
+	if next > 0 then
+	    next = nil
+	end
+	self.recent_warnings[message] = next
+    end
 end
 
-function IronGate.Warning(reason, ...)
-    IronGate.ChatMessage(string.format("|cffffc000%s:|r %s", L["Warning"],
-				       string.format(reason, ...)))
+function IronGate:Warning(reason, ...)
+    if not self.show_warnings then
+	return
+    end
+    local message = string.format(reason, ...)
+    if (self.recent_warnings[message] or 0) >= 0 then
+	self:ChatMessage(string.format("|cffffc000%s:|r %s",
+				       L["Warning"], message))
+	self.recent_warnings[message] = -self.warning_interval
+    end
+    if self.next_warning_sound >= 0 then
+	PlaySound(self.warning_sound_name, self.sound_channel)
+	self.next_warning_sound = -self.warning_sound_interval
+    end
 end
 
-function IronGate.Disqualify(reason, ...)
-    if not IronGateDB.disqualified then
+function IronGate:Disqualify(reason, ...)
+    if not self.disqualified then
 	IronGateDB.disqualified = true
 	IronGateDB.disqualification_reason = string.format(reason, ...)
     end
-    if not IronGate.disqualified then
-	IronGate.disqualified = true
-	IronGate.ChatMessage("|cffff0000%s: %s|r", L["Disqualified"],
-			     string.format(reason, ...))
+    if not self.disqualified then
+	self.disqualified = true
+	self:ChatMessage("|cffff0000%s: %s|r", L["Disqualified"],
+			 string.format(reason, ...))
 	-- bug the player no longer with warnings
-	IronGate.max_warnings = 0
+	self:Warning(L["Further warnings suppressed."])
+	self.show_warnings = false
+	PlaySound(self.disqualified_sound_name, self.sound_channel)
     end
 end
 
-function IronGate.DisqualifyOnFirstTransgression(...)
+function IronGate:DisqualifyOnFirstTransgression(...)
     for _, audit in ipairs({...}) do
 	local co = coroutine.create(audit)
-	local ok, message = coroutine.resume(co)
+	local ok, message = coroutine.resume(co, self)
 	if ok and message then
-	    IronGate.Disqualify(message)
+	    IronGate:Disqualify(message)
 	    break
 	end
     end
 end
 
-function IronGate.WarnTransgressions(...)
+function IronGate:WarnTransgressions(...)
     local warnings = 0
     for _, audit in ipairs({...}) do
 	local co = coroutine.create(audit)
 	repeat
-	    local ok, message = coroutine.resume(co)
-	    if ok and message and IronGate.recent_warnings[message] == nil then
-		warnings = warnings + 1
-		if warnings <= IronGate.max_warnings then
-		    IronGate.Warning(message)
-		    IronGate.recent_warnings[message] = true
-		end
+	    local ok, message = coroutine.resume(co, self)
+	    if ok and message then
+		IronGate:Warning(message)
 	    end
 	until not ok
-    end
-    if warnings > IronGate.max_warnings and IronGate.max_warnings > 0 then
-	IronGate.Warning(L["(and %d more)"], warnings - IronGate.max_warnings)
     end
 end
 
@@ -157,12 +170,12 @@ local stats_that_should_be_zero = {
     2277, -- Travel: Summons accepted
 }
 
-function IronGate.StatisticsAudit()
+function IronGate:StatisticsAudit()
     for _, stat_id in ipairs(stats_that_should_be_zero) do
 	local value = GetStatistic(stat_id)
 	if value ~= 0 and value ~= '--' then
-	    local id, name, points, completed, month, day, year, description, flags, image, reward = GetAchievementInfo(stat_id)
-	    coroutine.yield(string.format(L["%s statistic should be 0 but is %s."],
+	    local _, name = GetAchievementInfo(stat_id)
+	    coroutine.yield(string.format(L["%s stat should be 0 but is %s."],
 					  name, value))
 	end
     end
@@ -191,17 +204,18 @@ local monitored_slot_names = {
     "AmmoSlot",
 }
 
-function IronGate.EquippedAudit()
+function IronGate:EquippedAudit()
     for _, slot_name in ipairs(monitored_slot_names) do
 	local slot_id = GetInventorySlotInfo(slot_name)
 	local quality = GetInventoryItemQuality("player", slot_id)
 	if quality and quality >= ITEM_QUALITY_UNCOMMON and quality <= 7 then
-	    coroutine.yield(string.format(L["%s equipment should be |cff9d9d9dpoor|r or |cffffffffcommon|r."], _G[string.upper(slot_name)]))
+	    local fmt = "%s equipment should be |cff9d9d9dpoor|r or |cffffffffcommon|r."
+	    coroutine.yield(string.format(L[fmt], _G[string.upper(slot_name)]))
 	end
     end
 end
 
-function IronGate.PartyAudit()
+function IronGate:PartyAudit()
     if GetNumPartyMembers() > 0 then
 	coroutine.yield(L["Player is in a party."])
     end
@@ -210,40 +224,44 @@ function IronGate.PartyAudit()
     end
 end
 
-local acceptable_aura_sources = {
+local ok_aura_sources = {
     ["player"] = true,
     ["pet"] = true,
     ["vehicle"] = true,
 }
 
-local acceptable_aura_spell_ids = {
-    [69867] = true, -- Barrens Bloom
-    -- human starter zone
+local ok_aura_spell_ids = {
+    [69867] = true, -- Lavalash: Barrens Bloom
+    [6307] = true, -- Warlock Imp: Blood Pact (seen switching demons)
+    [54424] = true, -- Warlock Felhunter: Fel Intelligence
+    [75447] = true, -- Hunter: Ferocious Inspiration (hypothetical)
+    -- Tallonkai Swiftroot: Mark of the Wild
 }
 
-function IronGate.AuraAudit()
+function IronGate:AuraAudit()
     for i = 1, MAX_TARGET_BUFFS do
 	local name, _, _, _, _, _, _, source, _, _, spell_id = UnitBuff("player", i)
 	if name == nil then
 	    break
 	end
-	if not acceptable_aura_sources[source] and not acceptable_aura_spell_ids[spell_id] then
+	if not ok_aura_sources[source] and not ok_aura_spell_ids[spell_id] then
 	    coroutine.yield(string.format(L["%s buff."], name))
 	end
     end
 end
 
-function IronGate.GuildAudit()
+function IronGate:GuildAudit()
     if IsInGuild() then
 	local guild_name = GetGuildInfo("player")
 	local guild_level = GetGuildLevel()
 	if guild_level > 1 then
-	    coroutine.yield(string.format(L["Guild %s is level %d."], guild_name, guild_level))
+	    coroutine.yield(string.format(L["Guild %s is level %d."],
+					  guild_name, guild_level))
 	end
     end
 end
 
-function IronGate.TalentAudit()
+function IronGate:TalentAudit()
     function talent_audit(pet)
 	for tab_index = 1, GetNumTalentTabs(false, pet) do
 	    for talent_index = 1, GetNumTalents(tab_index, false, pet) do
@@ -263,19 +281,20 @@ local deadly_quests = {
     -- Howling Fjord: (from Valgarde)
 }
 
-function IronGate.QuestAudit()
+function IronGate:QuestAudit()
     local quest_entries, _ = GetNumQuestLogEntries()
     for i = 1, quest_entries do
 	local title, _, _, _, header, _, _, _, quest_id = GetQuestLogTitle(i)
 	if not header then
 	    if deadly_quests[quest_id] then
-		coroutine.yield(string.format(L["Quest \"%s\" may kill you."], title))
+		coroutine.yield(string.format(L["Quest \"%s\" may kill you."],
+					      title))
 	    end
 	end
     end
 end
 
-function IronGate.TrainerProfessionsAudit()
+function IronGate:TrainerProfessionsAudit()
     if IsTradeskillTrainer() then
 	for i = 1, GetNumTrainerServices() do
 	    local skill = GetTrainerServiceSkillLine(i)
@@ -287,11 +306,17 @@ function IronGate.TrainerProfessionsAudit()
     end
 end
 
-function IronGate.PLAYER_DEAD()
-    IronGate.Disqualify(L["Player died."])
+function IronGate:QuellTalentDistraction()
+    -- stop the throbbing talent button
+    MicroButtonPulseStop(TalentMicroButton)
+    TalentMicroButtonAlert:Hide()
 end
 
-function IronGate.PLAYER_LOGIN()
+function IronGate:PLAYER_DEAD()
+    IronGate:Disqualify(L["Player died."])
+end
+
+function IronGate:PLAYER_LOGIN()
     local generation = IronGateDB.generation or 1
     if UnitLevel("player") == 1 and UnitXP("player") == 0 then
 	-- character is rerolled
@@ -299,86 +324,80 @@ function IronGate.PLAYER_LOGIN()
 	wipe(IronGateDB)
     end
     IronGateDB.generation = generation
-    IronGate.ChatMessage(L["Welcome to the Ironman Challenge. Watch your step."])
-    IronGate.DisqualifyOnFirstTransgression(IronGate.StatisticsAudit)
-    IronGate.WarnTransgressions(
-	IronGate.EquippedAudit,
-	IronGate.PartyAudit,
-	IronGate.AuraAudit,
-	IronGate.GuildAudit,
-	IronGate.TalentAudit
+    self:ChatMessage(L["Welcome to the Ironman Challenge. Watch your step."])
+    self:DisqualifyOnFirstTransgression(self.StatisticsAudit)
+    self:QuellTalentDistraction()
+    self:WarnTransgressions(
+	self.EquippedAudit,
+	self.PartyAudit,
+	self.AuraAudit,
+	self.GuildAudit,
+	self.TalentAudit
     )
 end
 
-function IronGate.PLAYER_XP_UPDATE()
-    IronGate.DisqualifyOnFirstTransgression(
-	IronGate.EquippedAudit,
-	IronGate.PartyAudit,
-	IronGate.AuraAudit,
-	IronGate.GuildAudit,
-	IronGate.TalentAudit
+function IronGate:PLAYER_XP_UPDATE()
+    self:DisqualifyOnFirstTransgression(
+	self.EquippedAudit,
+	self.PartyAudit,
+	self.AuraAudit,
+	self.GuildAudit,
+	self.TalentAudit
     )
     IronGateDB.experienced = true
-    -- ill placed
-    IronGate.ResetRecentWarnings()
 end
 
-function IronGate.PLAYER_EQUIPMENT_CHANGED()
-    IronGate.WarnTransgressions(IronGate.EquippedAudit)
+function IronGate:PLAYER_EQUIPMENT_CHANGED()
+    self:WarnTransgressions(self.EquippedAudit)
 end
 
-function IronGate.PARTY_MEMBERS_CHANGED()
-    IronGate.WarnTransgressions(IronGate.PartyAudit)
+function IronGate:PARTY_MEMBERS_CHANGED()
+    self:WarnTransgressions(self.PartyAudit)
 end
 
-function IronGate.UNIT_AURA()
-    IronGate.WarnTransgressions(IronGate.AuraAudit)
+function IronGate:UNIT_AURA()
+    self:WarnTransgressions(self.AuraAudit)
 end
 
-function IronGate.PLAYER_GUILD_UPDATE()
-    IronGate.WarnTransgressions(IronGate.GuildAudit)
+function IronGate:PLAYER_GUILD_UPDATE()
+    self:WarnTransgressions(self.GuildAudit)
 end
 
-function IronGate.QUEST_ACCEPTED()
-    IronGate.WarnTransgressions(IronGate.QuestAudit)
+function IronGate:QUEST_ACCEPTED()
+    self:WarnTransgressions(self.QuestAudit)
 end
 
-function IronGate.ToggleTalentFrame()
+function IronGate:ToggleTalentFrame()
     if PlayerTalentFrameTalents and PlayerTalentFrameTalents:IsVisible() then
-	IronGate.Warning(L["Talents."])
+	self:Warning(L["Talents."])
     end
 end
 
-function IronGate.PLAYER_TALENT_UPDATE()
-    IronGate.DisqualifyOnFirstTransgression(IronGate.TalentAudit)
+function IronGate:PLAYER_TALENT_UPDATE()
+    self:QuellTalentDistraction()
+    self:DisqualifyOnFirstTransgression(self.TalentAudit)
 end
 
-function IronGate.TRADE_SHOW()
-    IronGate.Warning(L["Trading."])
+function IronGate:TRADE_SHOW()
+    self:Warning(L["Trading."])
 end
 
-function IronGate.TRADE_ACCEPT_UPDATE(player_agreed, target_agreed)
+function IronGate:TRADE_ACCEPT_UPDATE(player_agreed, target_agreed)
     if player_agreed == 1 and target_agreed == 1 then
 	-- XXX Should check on whether anything was traded
-	IronGate.Disqualify(L["Trading."])
+	self:Disqualify(L["Trading."])
     end
 end
 
-function IronGate.TRAINER_SHOW()
-    IronGate.WarnTransgressions(IronGate.TrainerProfessionsAudit)
+function IronGate:TRAINER_SHOW()
+    self:WarnTransgressions(self.TrainerProfessionsAudit)
+end
+
+function IronGate:CHARACTER_POINTS_CHANGED()
+    self:QuellTalentDistraction()
 end
 
 local frame = CreateFrame("Frame", "IronGate")
-function frame:OnEvent(event, ...)
-    local fn = IronGate[event]
-    if fn then
-	fn(...)
-    else
-	IronGate.DebugMessage(event, ...)
-    end
-end
-
-frame:SetScript("OnEvent", frame.OnEvent)
 frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 frame:RegisterEvent("PLAYER_DEAD")
 frame:RegisterEvent("PLAYER_LOGIN")
@@ -387,8 +406,24 @@ frame:RegisterEvent("PARTY_MEMBERS_CHANGED")
 frame:RegisterEvent("UNIT_AURA")
 frame:RegisterEvent("PLAYER_GUILD_UPDATE")
 frame:RegisterEvent("QUEST_ACCEPTED")
-hooksecurefunc("ToggleTalentFrame", IronGate.ToggleTalentFrame)
+hooksecurefunc("ToggleTalentFrame",
+	       function () IronGate:ToggleTalentFrame() end)
 frame:RegisterEvent("PLAYER_TALENT_UPDATE")
 frame:RegisterEvent("TRADE_SHOW")
 frame:RegisterEvent("TRADE_ACCEPT_UPDATE")
 frame:RegisterEvent("TRAINER_SHOW")
+frame:RegisterEvent("CHARACTER_POINTS_CHANGED")
+
+function frame:OnEvent(event, ...)
+    local fn = IronGate[event]
+    if fn then
+	fn(IronGate, ...)
+    else
+	IronGate:DebugMessage(event, ...)
+    end
+end
+function frame:OnUpdate(elapsed)
+    IronGate:ResetWarningDebouncers(elapsed)
+end
+frame:SetScript("OnEvent", frame.OnEvent)
+frame:SetScript("OnUpdate", frame.OnUpdate)

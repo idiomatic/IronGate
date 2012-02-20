@@ -1,3 +1,3 @@
 local L = { }
-IronGate.Locales.ptBR = L
+IronGate.locales.ptBR = L
 

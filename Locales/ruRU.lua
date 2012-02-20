@@ -1,3 +1,3 @@
 local L = { }
-IronGate.Locales.ruRU = L
+IronGate.locales.ruRU = L
 

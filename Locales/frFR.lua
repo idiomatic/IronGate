@@ -1,3 +1,3 @@
 local L = { }
-IronGate.Locales.frFR = L
+IronGate.locales.frFR = L
 

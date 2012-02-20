@@ -1,3 +1,3 @@
 local L = { }
-IronGate.Locales.zhTW = L
+IronGate.locales.zhTW = L
 
