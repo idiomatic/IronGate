@@ -4,12 +4,12 @@
 -- TODO detect and notify:
 -- TODO detect assistance (damage dealt < mob's total HP)
 -- TODO detect refer-a-friend effects
--- TODO detect leveing addons (?)
+-- TODO detect leveling addons (?)
 -- TODO detect receipt of items or gold in mail (except AH)
 
 -- TODO take preventitive actions:
 -- TODO prevent equpping green (or better) items (hard because of protected API)
--- TODO prevent enchanting (except rogue poisons)
+-- TODO prevent enchanting (except rogue poisons; Keeshan's Bandana ok, Coarse Sharpening Stone bad)
 -- TODO prevent gemming
 -- TODO prevent reforging
 -- TODO prevent specialization
@@ -32,8 +32,7 @@ IronGateDB = { }
 IronGate = {
     disqualified = false,
     locales = { },
-    preferred_locale = GetLocale(),
-    fallback_locale = 'enUS',
+    locale_priority = { GetLocale(), 'enUS' },
     show_warnings = true,
     recent_warnings = { },
     next_warning_sound = 0,
@@ -42,17 +41,25 @@ IronGate = {
     warning_sound_name = 'RaidWarning',
     disqualified_sound_name = 'igQuestFailed' or 'Deathbind Sound',
     sound_channel = 'Master',
+    chat_channel_priority = { 'irongate', 'iron' },
+    latest_attacker = nil,
+    latest_spell = nil,
 }
 
 local DB = IronGateDB
 
 local L = setmetatable({ }, {
     __index = function (self, key)
-		  local pl = IronGate.locales[IronGate.preferred_locale]
-		  local fl = IronGate.locales[IronGate.fallback_locale]
-		  local value = (pl and pl[key]) or (fl and fl[key]) or key
-		  if value == true then
-		      value = key
+		  local value = key
+		  for _, locale in ipairs(IronGate.locale_priority) do
+		      local l = IronGate.locales[locale]
+		      if l and l[key] then
+			  value = l[key]
+			  if value == true then
+			      value = key
+			  end
+			  break
+		      end
 		  end
 		  rawset(self, key, value)
 		  return value
@@ -117,7 +124,7 @@ function IronGate:DisqualifyOnFirstTransgression(...)
 	local co = coroutine.create(audit)
 	local ok, message = coroutine.resume(co, self)
 	if ok and message then
-	    IronGate:Disqualify(message)
+	    self:Disqualify(message)
 	    break
 	end
     end
@@ -133,6 +140,28 @@ function IronGate:WarnTransgressions(...)
 		IronGate:Warning(message)
 	    end
 	until not ok
+    end
+end
+
+function IronGate:AnnounceObituary()
+    if not self.disqualified then
+	local message = string.format(L["I just died from %s %s."],
+				      (self.latest_attacker or L["Unknown Attacker"]),
+				      (self.latest_spell or L["Unknown Damage"])
+				  )
+	-- only send to one pre-programmed channel
+	for _, channel_name in ipairs(self.chat_channel_priority) do
+	    local channel_number, _ ,_ = GetChannelName(channel_name)
+	    if channel_number > 0 then
+		SendChatMessage(message, "CHANNEL", nil, channel_number)
+		break
+	    end
+	end
+	-- only send to guilds named Ironsomething
+	local guild_name = GetGuildInfo("player")
+	if guild_name and string.match(guild_name, L["^[Ii]ron"]) then
+	    SendChatMessage(message, "GUILD")
+	end
     end
 end
 
@@ -235,6 +264,7 @@ local ok_aura_spell_ids = {
     [6307] = true, -- Warlock Imp: Blood Pact (seen switching demons)
     [54424] = true, -- Warlock Felhunter: Fel Intelligence
     [75447] = true, -- Hunter: Ferocious Inspiration (hypothetical)
+    [85451] = true, -- Lady Sylvanas Windrunner: Death Walk
     -- Tallonkai Swiftroot: Mark of the Wild
 }
 
@@ -313,7 +343,8 @@ function IronGate:QuellTalentDistraction()
 end
 
 function IronGate:PLAYER_DEAD()
-    IronGate:Disqualify(L["Player died."])
+    self:AnnounceObituary()
+    self:Disqualify(L["Player died."])
 end
 
 function IronGate:PLAYER_LOGIN()
@@ -397,6 +428,31 @@ function IronGate:CHARACTER_POINTS_CHANGED()
     self:QuellTalentDistraction()
 end
 
+function IronGate:COMBAT_LOG_EVENT_UNFILTERED(timestamp, event, hide_caster, source_guid, source_name, source_flags, source_raid_flags, dest_guid, dest_name, dest_flags, dest_raid_flags, ...)
+    if dest_name ~= UnitName("player") then
+	return
+    end
+    if event == "SWING_DAMAGE" then
+	self.latest_attacker = source_name
+	self.latest_spell = ACTION_SWING
+    elseif event == "SPELL_DAMAGE" or event == "SPELL_PERIODIC_DAMAGE" or event == "SPELL_BUILDING_DAMAGE" then
+	self.latest_attacker = source_name
+	_, self.latest_spell = ...
+    elseif event == "ENVIRONMENTAL_DAMAGE" then
+	self.latest_attacker = "Environment"
+	self.latest_spell = _G["STRING_ENVIRONMENTAL_DAMAGE_" .. select(1, ...)]
+    end
+    --[[
+    local args = {...}
+    for i = 1, select('#', ...) do
+	if args[i] == nil then
+	    args[i] = 'nil'
+	end
+    end
+    self:DebugMessage("COMBAT_LOG %s -> %s (%s)", event, (dest_name or 'none'), table.concat(args, ','))
+    --]]
+end
+
 local frame = CreateFrame("Frame", "IronGate")
 frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 frame:RegisterEvent("PLAYER_DEAD")
@@ -413,6 +469,8 @@ frame:RegisterEvent("TRADE_SHOW")
 frame:RegisterEvent("TRADE_ACCEPT_UPDATE")
 frame:RegisterEvent("TRAINER_SHOW")
 frame:RegisterEvent("CHARACTER_POINTS_CHANGED")
+frame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+-- frame:RegisterEvent("UNIT_INVENTORY_CHANGED") -- check enchants
 
 function frame:OnEvent(event, ...)
     local fn = IronGate[event]

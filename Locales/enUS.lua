@@ -18,3 +18,7 @@ L["Trading."] = true
 L["Talents."] = true
 L["%d points in %s talent."] = true
 L["%s trainer."] = true
+L["I just died %d from %s %s."] = true
+L["Unknown Attacker"] = true
+L["Unknown Damage"] = true
+L["^[Ii]ron"] = true
