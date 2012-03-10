@@ -6,6 +6,7 @@
 -- TODO detect leveling addons (?)
 -- TODO detect receipt of items or gold in mail (except AH)
 -- TODO detect entering a zone that Deathwing torches (see Stood in Fire)
+-- TODO detect guild bank or repairs
 
 -- TODO prevent equpping green (or better) items (hard because of protected API)
 -- TODO prevent enchanting (except rogue poisons; Keeshan's Bandana ok, Coarse Sharpening Stone bad)
@@ -68,8 +69,8 @@ IronGate = {
     version_announcement_obsolete_penalty = 60,
     announcement_channel_join_delay = 10,
     announcement_channel = 'IronGateComm',
-    latest_attacker_level = nil,
-    --latest_attacker = nil,
+    --latest_attacker_level = nil,
+    latest_attacker = nil,
     latest_spell = nil,
     player_originated_buffs = { },
 }
@@ -165,12 +166,13 @@ function IronGate:VersionAnnouncement(elapsed)
                 RemoveChatWindowChannel(i, self.announcement_channel)
             end
         end
-    end
-    local next = self.next_version_announcement - elapsed
-    self.next_version_announcement = next
-    if next < 0 then
-        self:ResetNextVersionAnnouncement()
-        self:CommMessage("version", self.VERSION)
+    else
+	local next = self.next_version_announcement - elapsed
+	self.next_version_announcement = next
+	if next < 0 then
+	    self:ResetNextVersionAnnouncement()
+	    self:CommMessage("version", self.VERSION)
+	end
     end
 end
 
@@ -382,6 +384,17 @@ local ok_aura_spell_ids = {
     [30430] = true, -- Azuremyst Isle: Totem of Yor: Embrace of the Serpent
     [30448] = true, -- Azuremyst Isle: Totem of Vark: Shadow of the Forest
     [31609] = true, -- Bloodmyst Isle: What We Don't Know: Exarch's Enchantment
+    [31319] = true, -- Bloodmyst Isle: The Captain's Kiss
+    [65601] = true, -- Drag it Out of Them: Dragging a Razormane
+    [65628] = true, -- By Hook or by Crook: Saintly
+    [65629] = true, -- By Hook or by Crook: Nasty
+    -- STV: Be Raptor
+    [101260] = true, -- Darkmoon Faire: To the Staging Area!
+    [101012] = true, -- Darkmoon Faire: Quick Shot Bonus!
+    [102116] = true, -- Darkmoon Faire: Magic Wings
+    [61551] = true, -- Toy Train Set
+    [83523] = true, -- Agony Abounds: Doomweed Haze
+    [24829] = true, -- Fortitude of the Sin'dorei
 }
 
 function IronGate:AuraAudit()
@@ -430,6 +443,7 @@ local deadly_quests = {
     [27377] = true, -- Twilight Highlands: Devoured
     -- Howling Fjord: (from Valgarde)
     [26727] = true, -- Darkshire: The Embalmer's Revenge (hard)
+    -- Grizzy Hills: die and talk to a ghost
 }
 
 function IronGate:QuestAudit()
@@ -469,10 +483,15 @@ end
 
 function IronGate:AddonMessage(message, sender)
     local version = string.match(message, "^version:([0-9%.]+)$")
-    if self:VersionCompare(self.version_superseded or self.VERSION, version) < 0 then
-        self:ChatMessage(string.format(L["Your version of IronGate (%s) is superseded by version %s.  Update at your earliest convenience."], self.VERSION, version))
-        self.version_superseded = version
-        self:ResetNextVersionAnnouncement()
+    if version then
+	local comparison = self:VersionCompare(self.version_superseded or self.VERSION, version)
+	if comparison < 0 then
+	    self:ChatMessage(string.format(L["Your version of IronGate (%s) is superseded by version %s.  Update at your earliest convenience."], self.VERSION, version))
+	    self.version_superseded = version
+	end
+	if comparison <= 0 then
+	    self:ResetNextVersionAnnouncement()
+	end
     end
 end
 
@@ -642,12 +661,14 @@ frame:SetScript("OnUpdate", frame.OnUpdate)
 
 function IronGate:Command(args)
     local subcommand = string.match(args, "(%S+)")
-    if string.lower(subcommand) == L["reset"] then
-        self.disqualified = false
-        self.show_warnings = true
-        self.recent_warnings = { }
-        IronGateDB.disqualified = false
-        IronGate:ChatMessage(L["reset."])
+    if subcommand then
+	if string.lower(subcommand) == L["reset"] then
+	    self.disqualified = false
+	    self.show_warnings = true
+	    self.recent_warnings = { }
+	    IronGateDB.disqualified = false
+	    IronGate:ChatMessage(L["reset."])
+	end
     end
 end
 

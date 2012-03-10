@@ -1,6 +1,6 @@
 # Copyright (c) 2012, r. brian harrison.  All rights reserved.
 
-VERSION=0.5
+VERSION=0.6
 
 APP=IronGate
 
