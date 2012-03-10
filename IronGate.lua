@@ -377,6 +377,7 @@ local ok_aura_spell_ids = {
     [66251] = true, -- Gilneas: Launch
     [72069] = true, -- Gilneas: Soldier of the Battle for Gilneas City
     [81790] = true, -- Gilneas: Endgame: For Gilneas!
+    [64198] = true, -- Grovekeeper's Trance
     [64329] = true, -- The Ritual Bond: Blessing of the Thistle Bear
     [64340] = true, -- The Ritual Bond: Blessing of the Moonstalker
     [64341] = true, -- The Ritual Bond: Blessing of the Stag
@@ -389,7 +390,8 @@ local ok_aura_spell_ids = {
     [65628] = true, -- By Hook or by Crook: Saintly
     [65629] = true, -- By Hook or by Crook: Nasty
     -- STV: Be Raptor
-    [101260] = true, -- Darkmoon Faire: To the Staging Area!
+    [101260] = true, -- Darkmoon Faire: To the Staging Area! (Alliance)
+    [103582] = true, -- Darkmoon Faire: To the Staging Area!
     [101012] = true, -- Darkmoon Faire: Quick Shot Bonus!
     [102116] = true, -- Darkmoon Faire: Magic Wings
     [61551] = true, -- Toy Train Set
