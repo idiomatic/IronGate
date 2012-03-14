@@ -368,9 +368,15 @@ local ok_aura_sources = {
 
 local ok_aura_spell_ids = {
     [69867] = true, -- Lavalash: Barrens Bloom
-    [6307] = true, -- Warlock Imp: Blood Pact (seen switching demons)
-    [54424] = true, -- Warlock Felhunter: Fel Intelligence
-    [75447] = true, -- Hunter: Ferocious Inspiration (hypothetical)
+    [6307] = true, -- Warlock's Imp: Blood Pact (seen switching demons)
+    [54424] = true, -- Warlock's Felhunter: Fel Intelligence
+    [75447] = true, -- Hunter: Ferocious Inspiration
+    [93435] = true, -- Hunter's Cat: Roar of Courage
+    [90364] = true, -- Hunter's Silithid: Qiraji Fortitude
+    [90363] = true, -- Hunter's Shale Spider: Embrace of the Shale Spider
+    [90355] = true, -- Hunter's Core Hound: Ancient Hysteria
+    [90309] = true, -- Hunter's Devilsaur: Terrifying Roar
+    [24604] = true, -- Hunter's Wolf: Furious Howl
     [85451] = true, -- Lady Sylvanas Windrunner: Death Walk
     [79060] = true, -- Tallonkai Swiftroot: Mark of the Wild
     [67503] = true, -- Stoneward Prison: Rebel Valor
@@ -461,11 +467,16 @@ function IronGate:QuestAudit()
     end
 end
 
+local ok_tradeskills = {
+    [PROFESSIONS_FIRST_AID] = true,
+    ["Riding"] = true,
+}
+
 function IronGate:TrainerProfessionsAudit()
     if IsTradeskillTrainer() then
         for i = 1, GetNumTrainerServices() do
             local skill = GetTrainerServiceSkillLine(i)
-            if skill ~= PROFESSIONS_FIRST_AID then
+            if not ok_tradeskills[skill] then
                 coroutine.yield(string.format(L["%s trainer."], skill))
                 break
             end
