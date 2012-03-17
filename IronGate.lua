@@ -403,6 +403,10 @@ local ok_aura_spell_ids = {
     [61551] = true, -- Toy Train Set
     [83523] = true, -- Agony Abounds: Doomweed Haze
     [24829] = true, -- Fortitude of the Sin'dorei
+    [67404] = true, -- Elune's Gifts: Elune's Reflection
+    [65753] = true, -- A Growing Problem: Tonga's Eyes
+    [8076] = true, -- Ending Their World: Strength of Earth
+    [73841] = true, -- The Wolf and the Kodo: Hunting
 }
 
 function IronGate:AuraAudit()
