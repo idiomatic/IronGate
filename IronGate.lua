@@ -372,10 +372,10 @@ local ok_aura_spell_ids = {
     [54424] = true, -- Warlock's Felhunter: Fel Intelligence
     [75447] = true, -- Hunter: Ferocious Inspiration
     [93435] = true, -- Hunter's Cat: Roar of Courage
-    [90364] = true, -- Hunter's Silithid: Qiraji Fortitude
-    [90363] = true, -- Hunter's Shale Spider: Embrace of the Shale Spider
-    [90355] = true, -- Hunter's Core Hound: Ancient Hysteria
-    [90309] = true, -- Hunter's Devilsaur: Terrifying Roar
+    --[90364] = true, -- Hunter's Silithid: Qiraji Fortitude [BM]
+    --[90363] = true, -- Hunter's Shale Spider: Embrace of the Shale Spider [BM]
+    --[90355] = true, -- Hunter's Core Hound: Ancient Hysteria [BM]
+    --[90309] = true, -- Hunter's Devilsaur: Terrifying Roar [BM]
     [24604] = true, -- Hunter's Wolf: Furious Howl
     [85451] = true, -- Lady Sylvanas Windrunner: Death Walk
     [79060] = true, -- Tallonkai Swiftroot: Mark of the Wild
@@ -407,6 +407,19 @@ local ok_aura_spell_ids = {
     [65753] = true, -- A Growing Problem: Tonga's Eyes
     [8076] = true, -- Ending Their World: Strength of Earth
     [73841] = true, -- The Wolf and the Kodo: Hunting
+    [91082] = true, -- E'ko Madness: Juju Frenzy
+    [91991] = true, -- E'ko Madness: Juju Instinct
+    [91992] = true, -- E'ko Madness: Juju Mending
+    [93150] = true, -- E'ko Madness: Juju Brawn
+    [93157] = true, -- E'ko Madness: Juju Fury
+    [93164] = true, -- E'ko Madness: Juju Freeze
+    [93165] = true, -- E'ko Madness: Juju Chill
+    [67704] = true, -- Memories of the Dead
+    [68710] = true, -- Azsharite Experiment Number Two: Shrunkified
+    [93395] = true, -- Friends Come In All Colors: Water Walking
+    [68602] = true, -- Archmage Xylem?: Arcane Detonation
+    [69186] = true, -- Lightning Strike Assassination: Curling Black Cord
+    [77593] = true, -- Thunder Lizard: Revitalized!
 }
 
 function IronGate:AuraAudit()
@@ -653,6 +666,8 @@ frame:RegisterEvent("PLAYER_GUILD_UPDATE")
 frame:RegisterEvent("QUEST_ACCEPTED")
 hooksecurefunc("ToggleTalentFrame",
                function () IronGate:ToggleTalentFrame() end)
+--hooksecurefunc("ShowTalentFrame",
+--               function () IronGate:ShowTalentFrame() end)
 frame:RegisterEvent("PLAYER_TALENT_UPDATE")
 frame:RegisterEvent("TRADE_SHOW")
 frame:RegisterEvent("TRADE_ACCEPT_UPDATE")

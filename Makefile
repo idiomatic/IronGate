@@ -1,6 +1,7 @@
 # Copyright (c) 2012, r. brian harrison.  All rights reserved.
 
-VERSION=0.7
+INTERFACE=40300
+VERSION=0.8
 
 APP=IronGate
 
@@ -20,7 +21,7 @@ FILES=	$(APP)/$(APP).toc \
 DIRS=	
 
 build:
-	sed -i~ -e "s/^\(## Title: [^|]* |cff00aa00\)[^|]*|r/\1$(VERSION)|r/" -e "s/^\(## Version: \)[0-9.-]*/\1$(VERSION)/" $(APP).toc
+	sed -i~ -e "s/^\(## Title: [^|]* |cff00aa00\)[^|]*|r/\1$(VERSION)|r/" -e "s/^\(## Version: \)[0-9.-]*/\1$(VERSION)/" -e "s/^\(## Interface: \)[0-9.-]*/\1$(INTERFACE)/" $(APP).toc
 	(echo "$(APP) = $(APP) or { }"; \
 	 echo "$(APP).VERSION = \"$(VERSION)\"" ) > $(APP)_Version.lua
 	-rm ../$(APP)-$(VERSION).zip
